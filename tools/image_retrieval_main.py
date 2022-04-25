@@ -56,10 +56,10 @@ torch.manual_seed(0)
 import random
 random.seed(0)
 
-output_path = '/media/rafi/Samsung_T5/_DATASETS/vg/new_model/results/sg_of_causal_sgdet_ctx_only_%s_%d.pytorch'
-sg_train_path = '/media/rafi/Samsung_T5/_DATASETS/vg/new_model/sgg/train_sg_of_causal_sgdet_ctx_only.json'
-sg_test_path = '/media/rafi/Samsung_T5/_DATASETS/vg/new_model/sgg/test_sg_of_causal_sgdet_ctx_only.json'
-sg_val_path = '/media/rafi/Samsung_T5/_DATASETS/vg/new_model/sgg/val_sg_of_causal_sgdet_ctx_only.json'
+output_path = '/content/scene_graph/datasets/vg/new_model/results/sg_of_causal_sgdet_ctx_only_%s_%d.pytorch'
+sg_train_path = '/content/scene_graph/datasets/vg/new_model/sgg/train_sg_of_causal_sgdet_ctx_only.json'
+sg_test_path = '/content/scene_graph/datasets/vg/new_model/sgg/test_sg_of_causal_sgdet_ctx_only.json'
+sg_val_path = '/content/scene_graph/datasets/vg/new_model/sgg/val_sg_of_causal_sgdet_ctx_only.json'
 
 def get_dataset():
     """
