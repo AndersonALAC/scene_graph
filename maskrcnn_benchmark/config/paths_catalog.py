@@ -3,11 +3,11 @@
 
 import os
 import copy
+from SHA_GCL_extra.dataset_path import datasets_path
 
 
 class DatasetCatalog(object):
-    #DATA_DIR = "/home/users/alatif/data/ImageCorpora/"
-    DATA_DIR = "/content/scene_graph/datasets"
+    DATA_DIR = "datasets"
     DATASETS = {
         "coco_2017_train": {
             "img_dir": "coco/train2017",
@@ -107,17 +107,22 @@ class DatasetCatalog(object):
             "ann_file": "cityscapes/annotations/instancesonly_filtered_gtFine_test.json"
         },
         "VG_stanford_filtered": {
-            "img_dir": "vg/VG_100K",
-            "roidb_file": "vg/VG-SGG.h5",
-            "dict_file": "vg/VG-SGG-dicts.json",
-            "image_file": "vg/image_data.json",
+            "img_dir": datasets_path+"datasets/vg/VG_100K",
+            "roidb_file": datasets_path+"datasets/vg/VG-SGG.h5",
+            "dict_file": datasets_path+"datasets/vg/VG-SGG-dicts.json",
+            "image_file": datasets_path+"datasets/vg/image_data.json",
         },
         "VG_stanford_filtered_with_attribute": {
-            "img_dir": "vg/VG_100K",
-            "roidb_file": "vg/VG-SGG-with-attri.h5",
-            "dict_file": "vg/VG-SGG-dicts-with-attri.json",
-            "image_file": "vg/image_data.json",
-            "capgraphs_file": "vg/vg_capgraphs_anno.json",
+            "img_dir": datasets_path+"datasets/vg/VG_100K",
+            "roidb_file": datasets_path+"datasets/vg/VG-SGG-with-attri.h5",
+            "dict_file": datasets_path+"datasets/vg/VG-SGG-dicts-with-attri.json",
+            "image_file": datasets_path+"datasets/vg/image_data.json",
+        },
+        "GQA_200": {
+            "img_dir": datasets_path + "datasets/gqa/images",
+            "dict_file": datasets_path + "datasets/gqa/GQA_200_ID_Info.json",
+            "train_file": datasets_path + "datasets/gqa/GQA_200_Train.json",
+            "test_file": datasets_path + "datasets/gqa/GQA_200_Test.json",
         },
     }
 
@@ -145,7 +150,7 @@ class DatasetCatalog(object):
                 factory="PascalVOCDataset",
                 args=args,
             )
-        elif ("VG" in name) or ('GQA' in name):
+        elif "VG" in name:
             # name should be something like VG_stanford_filtered_train
             p = name.rfind("_")
             name, split = name[:p], name[p+1:]
@@ -164,6 +169,28 @@ class DatasetCatalog(object):
             args['custom_path'] = cfg.TEST.CUSTUM_PATH
             return dict(
                 factory="VGDataset",
+                args=args,
+            )
+
+        elif 'GQA' in name:
+            # name should be something like VG_stanford_filtered_train
+            p = name.rfind("_")
+            name, split = name[:p], name[p+1:]
+            assert name in DatasetCatalog.DATASETS and split in {'train', 'val', 'test'}
+            data_dir = DatasetCatalog.DATA_DIR
+            args = copy.deepcopy(DatasetCatalog.DATASETS[name])
+            for k, v in args.items():
+                args[k] = os.path.join(data_dir, v)
+            args['split'] = split
+            # IF MODEL.RELATION_ON is True, filter images with empty rels
+            # else set filter to False, because we need all images for pretraining detector
+            args['filter_non_overlap'] = (not cfg.MODEL.ROI_RELATION_HEAD.USE_GT_BOX) and cfg.MODEL.RELATION_ON and cfg.MODEL.ROI_RELATION_HEAD.REQUIRE_BOX_OVERLAP
+            args['filter_empty_rels'] = cfg.MODEL.RELATION_ON
+            args['flip_aug'] = cfg.MODEL.FLIP_AUG
+            args['custom_eval'] = cfg.TEST.CUSTUM_EVAL
+            args['custom_path'] = cfg.TEST.CUSTUM_PATH
+            return dict(
+                factory="GQADataset",
                 args=args,
             )
 

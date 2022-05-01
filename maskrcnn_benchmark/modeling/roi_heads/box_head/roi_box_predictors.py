@@ -34,7 +34,14 @@ class FastRCNNPredictor(nn.Module):
 class FPNPredictor(nn.Module):
     def __init__(self, cfg, in_channels):
         super(FPNPredictor, self).__init__()
-        num_classes = cfg.MODEL.ROI_BOX_HEAD.NUM_CLASSES
+        if cfg.GLOBAL_SETTING.DATASET_CHOICE == 'VG':
+            num_classes = cfg.MODEL.ROI_BOX_HEAD.VG_NUM_CLASSES
+        elif cfg.GLOBAL_SETTING.DATASET_CHOICE == 'GQA_200':
+            num_classes = cfg.MODEL.ROI_BOX_HEAD.GQA_200_NUM_CLASSES
+        else:
+            num_classes = None
+            exit('wrong Dataset choice')
+        #num_classes = cfg.MODEL.ROI_BOX_HEAD.VG_NUM_CLASSES
         representation_size = in_channels
 
         self.cls_score = nn.Linear(representation_size, num_classes)

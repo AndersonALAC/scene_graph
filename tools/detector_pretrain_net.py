@@ -172,7 +172,7 @@ def train(cfg, local_rank, distributed, logger):
 def run_val(cfg, model, val_data_loaders, distributed):
     if distributed:
         model = model.module
-    torch.cuda.empty_cache()  # TODO check if it helps
+    #torch.cuda.empty_cache()  # TODO check if it helps
     iou_types = ("bbox",)
     if cfg.MODEL.MASK_ON:
         iou_types = iou_types + ("segm",)
@@ -203,7 +203,7 @@ def run_val(cfg, model, val_data_loaders, distributed):
 def run_test(cfg, model, distributed):
     if distributed:
         model = model.module
-    torch.cuda.empty_cache()  # TODO check if it helps
+    #torch.cuda.empty_cache()  # TODO check if it helps
     iou_types = ("bbox",)
     if cfg.MODEL.MASK_ON:
         iou_types = iou_types + ("segm",)
@@ -245,7 +245,7 @@ def main():
     parser = argparse.ArgumentParser(description="PyTorch Object Detection Training")
     parser.add_argument(
         "--config-file",
-        default="",
+        default="configs/SHA_GCL_e2e_relation_X_101_32_8_FPN_1x",
         metavar="FILE",
         help="path to config file",
         type=str,

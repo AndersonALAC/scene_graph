@@ -41,6 +41,9 @@ except ImportError:
 
 
 def train(cfg, local_rank, distributed, logger):
+    best_epoch = 0
+    best_mR = 0.0
+    logger.info("***********************Step 1: loading models***********************")
     debug_print(logger, 'prepare training')
     model = build_detection_model(cfg) 
     debug_print(logger, 'end model construction')
@@ -69,6 +72,7 @@ def train(cfg, local_rank, distributed, logger):
     device = torch.device(cfg.MODEL.DEVICE)
     model.to(device)
 
+    logger.info("***********************Step 2: setting optimizer and shcedule***********************")
     num_gpus = int(os.environ["WORLD_SIZE"]) if "WORLD_SIZE" in os.environ else 1
     num_batch = cfg.SOLVER.IMS_PER_BATCH
     optimizer = make_optimizer(cfg, model, logger, slow_heads=slow_heads, slow_ratio=10.0, rl_factor=float(num_batch))
@@ -89,22 +93,32 @@ def train(cfg, local_rank, distributed, logger):
     debug_print(logger, 'end distributed')
     arguments = {}
     arguments["iteration"] = 0
+    logger.info("***********************Step 2: over***********************")
+    print('\n')
 
     output_dir = cfg.OUTPUT_DIR
 
+    logger.info("***********************Step 3: loading pre-trained model***********************")
     save_to_disk = get_rank() == 0
     checkpointer = DetectronCheckpointer(
         cfg, model, optimizer, scheduler, output_dir, save_to_disk, custom_scheduler=True
     )
     # if there is certain checkpoint in output_dir, load it, else load pretrained detector
+    if cfg.GLOBAL_SETTING.DATASET_CHOICE == 'VG':
+        pretrain_object_detector_dir = cfg.MODEL.PRETRAINED_DETECTOR_CKPT_VG
+    elif cfg.GLOBAL_SETTING.DATASET_CHOICE == 'GQA_200':
+        pretrain_object_detector_dir = cfg.MODEL.PRETRAINED_DETECTOR_CKPT_GQA
     if checkpointer.has_checkpoint():
-        extra_checkpoint_data = checkpointer.load(cfg.MODEL.PRETRAINED_DETECTOR_CKPT, 
+        extra_checkpoint_data = checkpointer.load(pretrain_object_detector_dir,
                                        update_schedule=cfg.SOLVER.UPDATE_SCHEDULE_DURING_LOAD)
         arguments.update(extra_checkpoint_data)
     else:
         # load_mapping is only used when we init current model from detection model.
-        checkpointer.load(cfg.MODEL.PRETRAINED_DETECTOR_CKPT, with_optim=False, load_mapping=load_mapping)
+        checkpointer.load(pretrain_object_detector_dir, with_optim=False, load_mapping=load_mapping)
     debug_print(logger, 'end load checkpointer')
+    logger.info("***********************Step 3: over***********************")
+    print('\n')
+    logger.info("***********************Step 4: preparing data***********************")
     train_data_loader = make_data_loader(
         cfg,
         mode='train',
@@ -118,11 +132,14 @@ def train(cfg, local_rank, distributed, logger):
     )
     debug_print(logger, 'end dataloader')
     checkpoint_period = cfg.SOLVER.CHECKPOINT_PERIOD
+    logger.info("***********************Step 4: over***********************")
+    print('\n')
 
-    if cfg.SOLVER.PRE_VAL:
+    if False:
         logger.info("Validate before training")
         run_val(cfg, model, val_data_loaders, distributed, logger)
 
+    logger.info("***********************Step training starts***********************")
     logger.info("Start training")
     meters = MetricLogger(delimiter="  ")
     max_iter = len(train_data_loader)
@@ -173,7 +190,7 @@ def train(cfg, local_rank, distributed, logger):
         eta_seconds = meters.time.global_avg * (max_iter - iteration)
         eta_string = str(datetime.timedelta(seconds=int(eta_seconds)))
 
-        if iteration % 200 == 0 or iteration == max_iter:
+        if iteration % 100 == 0 or iteration == max_iter:
             logger.info(
                 meters.delimiter.join(
                     [
@@ -201,6 +218,10 @@ def train(cfg, local_rank, distributed, logger):
         if cfg.SOLVER.TO_VAL and iteration % cfg.SOLVER.VAL_PERIOD == 0:
             logger.info("Start validating")
             val_result = run_val(cfg, model, val_data_loaders, distributed, logger)
+            if val_result > best_mR:
+                best_epoch = iteration
+                best_mR = val_result
+            logger.info("now best epoch in mR@k is : %d, num is %.4f" % (best_epoch, best_mR))
             logger.info("Validation Result: %.4f" % val_result)
  
         # scheduler should be called after optimizer.step() in pytorch>=1.1.0
@@ -220,6 +241,16 @@ def train(cfg, local_rank, distributed, logger):
             total_time_str, total_training_time / (max_iter)
         )
     )
+    logger.info("***********************Step training over***********************")
+
+    name = "model_{:07d}".format(best_epoch)
+    last_filename = os.path.join(cfg.OUTPUT_DIR, "{}.pth".format(name))
+    output_folder = os.path.join(cfg.OUTPUT_DIR, "last_checkpoint")
+    with open(output_folder, "w") as f:
+        f.write(last_filename)
+    print('\n\n')
+    logger.info("Best Epoch is : %.4f" % best_epoch)
+
     return model
 
 def fix_eval_modules(eval_modules):
@@ -231,7 +262,7 @@ def fix_eval_modules(eval_modules):
 def run_val(cfg, model, val_data_loaders, distributed, logger):
     if distributed:
         model = model.module
-    torch.cuda.empty_cache()
+    #torch.cuda.empty_cache()
     iou_types = ("bbox",)
     if cfg.MODEL.MASK_ON:
         iou_types = iou_types + ("segm",)
@@ -242,7 +273,14 @@ def run_val(cfg, model, val_data_loaders, distributed, logger):
     if cfg.MODEL.ATTRIBUTE_ON:
         iou_types = iou_types + ("attributes", )
 
-    dataset_names = cfg.DATASETS.VAL
+    if cfg.GLOBAL_SETTING.DATASET_CHOICE == 'VG':
+        dataset_names = cfg.DATASETS.VG_VAL
+    elif cfg.GLOBAL_SETTING.DATASET_CHOICE == 'GQA_200':
+        dataset_names = cfg.DATASETS.GQA_200_VAL
+    else:
+        dataset_names = None
+        exit('wrong Dataset name!')
+
     val_result = []
     for dataset_name, val_data_loader in zip(dataset_names, val_data_loaders):
         dataset_result = inference(
@@ -267,13 +305,19 @@ def run_val(cfg, model, val_data_loaders, distributed, logger):
     valid_result = gathered_result[gathered_result>=0]
     val_result = float(valid_result.mean())
     del gathered_result, valid_result
-    torch.cuda.empty_cache()
+    #torch.cuda.empty_cache()
     return val_result
 
-def run_test(cfg, model, distributed, logger):
+def run_test(cfg, model, distributed, logger, is_best=False):
+    if is_best:
+        logger.info("***********************Best testing starts***********************")
+        checkpointer = DetectronCheckpointer(cfg, model, save_dir=cfg.OUTPUT_DIR)
+        _ = checkpointer.load(cfg.MODEL.WEIGHT)
+    else:
+        logger.info("***********************Step testing starts***********************")
     if distributed:
         model = model.module
-    torch.cuda.empty_cache()
+    #torch.cuda.empty_cache()
     iou_types = ("bbox",)
     if cfg.MODEL.MASK_ON:
         iou_types = iou_types + ("segm",)
@@ -283,11 +327,23 @@ def run_test(cfg, model, distributed, logger):
         iou_types = iou_types + ("relations", )
     if cfg.MODEL.ATTRIBUTE_ON:
         iou_types = iou_types + ("attributes", )
-    output_folders = [None] * len(cfg.DATASETS.TEST)
-    dataset_names = cfg.DATASETS.TEST
+
+    if cfg.GLOBAL_SETTING.DATASET_CHOICE == 'VG':
+        dataset_names = cfg.DATASETS.VG_TEST
+    elif cfg.GLOBAL_SETTING.DATASET_CHOICE == 'GQA_200':
+        dataset_names = cfg.DATASETS.GQA_200_TEST
+    else:
+        dataset_names = None
+        exit('wrong Dataset name!')
+
+    output_folders = [None] * len(dataset_names)
+
     if cfg.OUTPUT_DIR:
         for idx, dataset_name in enumerate(dataset_names):
-            output_folder = os.path.join(cfg.OUTPUT_DIR, "inference", dataset_name)
+            if is_best:
+                output_folder = os.path.join(cfg.OUTPUT_DIR, "inference_best", dataset_name)
+            else:
+                output_folder = os.path.join(cfg.OUTPUT_DIR, "inference_final", dataset_name)
             mkdir(output_folder)
             output_folders[idx] = output_folder
     data_loaders_val = make_data_loader(cfg, mode='test', is_distributed=distributed)
@@ -306,13 +362,15 @@ def run_test(cfg, model, distributed, logger):
             logger=logger,
         )
         synchronize()
+        logger.info("***********************Step testing over***********************")
+        print('\n\n')
 
 
 def main():
     parser = argparse.ArgumentParser(description="PyTorch Relation Detection Training")
     parser.add_argument(
         "--config-file",
-        default="",
+        default="configs/SHA_GCL_e2e_relation_X_101_32_8_FPN_1x.yaml",
         metavar="FILE",
         help="path to config file",
         type=str,
@@ -353,6 +411,9 @@ def main():
 
     logger = setup_logger("maskrcnn_benchmark", output_dir, get_rank())
     logger.info("Using {} GPUs".format(num_gpus))
+    print('\n\n\n\n')
+    logger.info("---------------------------new training!---------------------------")
+    logger.info("***********************Step 0: loading configs***********************")
     logger.info(args)
 
     logger.info("Collecting env info (might take some time)")
@@ -368,6 +429,8 @@ def main():
     logger.info("Saving config into: {}".format(output_config_path))
     # save overloaded model config in the output directory
     save_config(cfg, output_config_path)
+    logger.info("***********************Step 0: over***********************")
+    print('\n')
 
     model = train(cfg, args.local_rank, args.distributed, logger)
 

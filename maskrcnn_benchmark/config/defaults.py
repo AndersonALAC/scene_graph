@@ -2,6 +2,7 @@
 import os
 
 from yacs.config import CfgNode as CN
+from SHA_GCL_extra.dataset_path import datasets_path
 
 
 # -----------------------------------------------------------------------------
@@ -37,8 +38,11 @@ _C.MODEL.CLS_AGNOSTIC_BBOX_REG = False
 # path
 _C.MODEL.WEIGHT = ""
 
-# checkpoint of detector, for relation prediction
-_C.MODEL.PRETRAINED_DETECTOR_CKPT = ""
+# checkpoint of detector, for relation prediction intial:NULL
+_C.MODEL.PRETRAINED_DETECTOR_CKPT_VG = datasets_path+\
+                                    "datasets/vg/detector_model/pretrained_faster_rcnn/model_final.pth"
+_C.MODEL.PRETRAINED_DETECTOR_CKPT_GQA = datasets_path+\
+                                    "datasets/vg/detector_model/GQA/model_final_from_vg.pth"
 
 # -----------------------------------------------------------------------------
 # INPUT
@@ -72,13 +76,15 @@ _C.INPUT.VERTICAL_FLIP_PROB_TRAIN = 0.0
 # -----------------------------------------------------------------------------
 _C.DATASETS = CN()
 # List of the dataset names for training, as present in paths_catalog.py
-_C.DATASETS.TRAIN = ()
+_C.DATASETS.VG_TRAIN = ()
 # List of the dataset names for val, as present in paths_catalog.py
 # Note that except dataset names, all remaining val configs reuse those of test
-_C.DATASETS.VAL = ()
+_C.DATASETS.VG_VAL = ()
 # List of the dataset names for testing, as present in paths_catalog.py
-_C.DATASETS.TEST = ()
-_C.DATASETS.TO_TEST = None
+_C.DATASETS.VG_TEST = ()
+_C.DATASETS.GQA_200_TRAIN = ()
+_C.DATASETS.GQA_200_VAL = ()
+_C.DATASETS.GQA_200_TEST = ()
 
 # -----------------------------------------------------------------------------
 # DataLoader
@@ -226,7 +232,8 @@ _C.MODEL.ROI_BOX_HEAD.PREDICTOR = "FastRCNNPredictor"
 _C.MODEL.ROI_BOX_HEAD.POOLER_RESOLUTION = 14
 _C.MODEL.ROI_BOX_HEAD.POOLER_SAMPLING_RATIO = 0
 _C.MODEL.ROI_BOX_HEAD.POOLER_SCALES = (1.0 / 16,)
-_C.MODEL.ROI_BOX_HEAD.NUM_CLASSES = 81
+_C.MODEL.ROI_BOX_HEAD.VG_NUM_CLASSES = 151
+_C.MODEL.ROI_BOX_HEAD.GQA_200_NUM_CLASSES = 201
 # Hidden layer dimension when using an MLP for the RoI box head
 _C.MODEL.ROI_BOX_HEAD.MLP_HEAD_DIM = 2048
 # GN
@@ -288,7 +295,8 @@ _C.MODEL.ROI_RELATION_HEAD = CN()
 _C.MODEL.ROI_RELATION_HEAD.PREDICTOR = "MotifPredictor"
 _C.MODEL.ROI_RELATION_HEAD.FEATURE_EXTRACTOR = "RelationFeatureExtractor"
 _C.MODEL.ROI_RELATION_HEAD.POOLING_ALL_LEVELS = True
-_C.MODEL.ROI_RELATION_HEAD.NUM_CLASSES = 51
+_C.MODEL.ROI_RELATION_HEAD.VG_NUM_CLASSES = 51
+_C.MODEL.ROI_RELATION_HEAD.GQA_200_NUM_CLASSES = 101
 _C.MODEL.ROI_RELATION_HEAD.BATCH_SIZE_PER_IMAGE = 64
 _C.MODEL.ROI_RELATION_HEAD.POSITIVE_FRACTION = 0.25
 _C.MODEL.ROI_RELATION_HEAD.USE_GT_BOX = True
@@ -585,8 +593,7 @@ _C.TEST.CUSTUM_PATH = '.'
 # ---------------------------------------------------------------------------- #
 _C.OUTPUT_DIR = "."
 _C.DETECTED_SGG_DIR = "."
-_C.GLOVE_DIR = "."
-
+_C.GLOVE_DIR = datasets_path+"datasets/vg/glove"
 _C.PATHS_CATALOG = os.path.join(os.path.dirname(__file__), "paths_catalog.py")
 _C.PATHS_DATA = os.path.join(os.path.dirname(__file__), "../data/datasets")
 
@@ -595,7 +602,23 @@ _C.PATHS_DATA = os.path.join(os.path.dirname(__file__), "../data/datasets")
 # ---------------------------------------------------------------------------- #
 
 # Precision of input, allowable: (float32, float16)
-_C.DTYPE = "float32"
+_C.DTYPE = "float16"
 
 # Enable verbosity in apex.amp
 _C.AMP_VERBOSE = False
+
+_C.GLOBAL_SETTING = CN()
+_C.GLOBAL_SETTING.DATASET_CHOICE = 'VG'
+_C.GLOBAL_SETTING.RELATION_PREDICTOR = 'TransLike_GCL'
+_C.GLOBAL_SETTING.BASIC_ENCODER = 'Hybrid-Attention'
+_C.GLOBAL_SETTING.USE_BIAS = True
+_C.GLOBAL_SETTING.CHOOSE_BEST_MODEL_BY_METRIC = '_mean_recall'
+_C.GLOBAL_SETTING.PRINT_INTERVAL = 100
+
+_C.GLOBAL_SETTING.GCL_SETTING = CN()
+_C.GLOBAL_SETTING.GCL_SETTING.GROUP_SPLIT_MODE = 'divide4'
+_C.GLOBAL_SETTING.GCL_SETTING.KNOWLEDGE_LOSS_COEFFICIENT = 1.0
+_C.GLOBAL_SETTING.GCL_SETTING.KNOWLEDGE_TRANSFER_MODE = 'KL_logit_TopDown'
+_C.GLOBAL_SETTING.GCL_SETTING.NO_RELATION_RESTRAIN = True
+_C.GLOBAL_SETTING.GCL_SETTING.ZERO_LABEL_PADDING_MODE = 'rand_insert'
+_C.GLOBAL_SETTING.GCL_SETTING.NO_RELATION_PENALTY = 0.1

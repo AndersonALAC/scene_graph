@@ -47,40 +47,19 @@ sg_model_name = 'motif'
 sg_fusion_name = 'rubi'
 sg_type_name = 'origin'
 
-#sg_train_path = '/data1/image_retrieval/causal_{}_sgdet_{}_{}_train.pytorch'.format(sg_model_name, sg_fusion_name, sg_type_name)
-#sg_test_path = '/data1/image_retrieval/causal_{}_sgdet_{}_{}_test.pytorch'.format(sg_model_name, sg_fusion_name, sg_type_name)
-#output_path = '/data1/image_retrieval_model/causal_'+sg_model_name+'_sgdet_'+sg_fusion_name+'_'+sg_type_name+'_output_%s_%d.pytorch'
+sg_train_path = '/data1/image_retrieval/causal_{}_sgdet_{}_{}_train.pytorch'.format(sg_model_name, sg_fusion_name, sg_type_name)
+sg_test_path = '/data1/image_retrieval/causal_{}_sgdet_{}_{}_test.pytorch'.format(sg_model_name, sg_fusion_name, sg_type_name)
+output_path = '/data1/image_retrieval_model/causal_'+sg_model_name+'_sgdet_'+sg_fusion_name+'_'+sg_type_name+'_output_%s_%d.pytorch'
 
-#Make results reproducibles
-torch.manual_seed(0)
-import random
-random.seed(0)
+#sg_train_path = '/data1/image_retrieval/causal_sgdet_rubi_TDE_train.json'
+#sg_test_path = '/data1/image_retrieval/causal_sgdet_rubi_TDE_test.json'
+#output_path = '/data1/image_retrieval/causal_sgdet_rubi_TDE_output_%s_%d.pytorch'
 
-output_path = '/content/scene_graph/datasets/vg/new_model/results/sg_of_causal_sgdet_ctx_only_%s_%d.pytorch'
-sg_train_path = '/content/scene_graph/datasets/vg/new_model/sgg/train_sg_of_causal_sgdet_ctx_only.json'
-sg_test_path = '/content/scene_graph/datasets/vg/new_model/sgg/test_sg_of_causal_sgdet_ctx_only.json'
-sg_val_path = '/content/scene_graph/datasets/vg/new_model/sgg/val_sg_of_causal_sgdet_ctx_only.json'
+sg_data = torch.load(sg_train_path)
+sg_data.update(torch.load(sg_test_path))
 
-def get_dataset():
-    """
-    Returns the ids of training samples, testing samples, and all scene graph relevant data for training
-    :return:
-    """
-    print("Loading samples. This can take a while.")
-    sg_data_train = json.load(open(sg_train_path))
-    sg_data_val = json.load(open(sg_val_path))
-    sg_data_test = json.load(open(sg_test_path))
-    #sg_data = torch.load(sg_train_path)
-    #sg_data.update(torch.load(sg_test_path))
-    #Merge the val sample to the training data, it would be a waste...
-    sg_data_train.update(sg_data_val)
-    sg_data = sg_data_train.copy()
-    sg_data.update(sg_data_test)
-    train_ids = list(sg_data_train.keys())
-    print("Number of Training Samples", len(train_ids))
-    test_ids = list(sg_data_test.keys())
-    print("Number of Testing Samples", len(test_ids))
-    return train_ids, test_ids, sg_data
+train_ids = list(torch.load(sg_train_path).keys())
+test_ids = list(torch.load(sg_test_path).keys())
 
 def train(cfg, local_rank, distributed, logger):
     model = SGEncode()
@@ -105,9 +84,7 @@ def train(cfg, local_rank, distributed, logger):
             find_unused_parameters=True,
         )
     debug_print(logger, 'end distributed')
-
-    train_ids, test_ids, sg_data = get_dataset()
-
+    
     train_data_loader = get_loader(cfg, train_ids, test_ids, sg_data=sg_data, test_on=False, val_on=False, num_test=5000, num_val=1000)
     val_data_loader = get_loader(cfg, train_ids, test_ids, sg_data=sg_data, test_on=False, val_on=True, num_test=5000, num_val=1000)
     test_data_loader = get_loader(cfg, train_ids, test_ids, sg_data=sg_data, test_on=True, val_on=False, num_test=5000, num_val=1000)
@@ -115,15 +92,17 @@ def train(cfg, local_rank, distributed, logger):
     debug_print(logger, 'end dataloader')
     checkpoint_period = cfg.SOLVER.CHECKPOINT_PERIOD
 
-    if os.path.exists(cfg.MODEL.PRETRAINED_DETECTOR_CKPT):
-        checkpoint = torch.load(cfg.MODEL.PRETRAINED_DETECTOR_CKPT, map_location=torch.device("cpu"))
-        print("Loading pretrained model:", cfg.MODEL.PRETRAINED_DETECTOR_CKPT)
+    if cfg.GLOBAL_SETTING.DATASET_CHOICE == 'VG':
+        pretrain_object_detector_dir = cfg.MODEL.PRETRAINED_DETECTOR_CKPT_VG
+    elif cfg.GLOBAL_SETTING.DATASET_CHOICE == 'GQA_200':
+        pretrain_object_detector_dir = cfg.MODEL.PRETRAINED_DETECTOR_CKPT_GQA
+    if os.path.exists(pretrain_object_detector_dir):
+        checkpoint = torch.load(pretrain_object_detector_dir, map_location=torch.device("cpu"))
         model.load_state_dict(checkpoint)
 
     if cfg.SOLVER.PRE_VAL:
         logger.info("Validate before training")
-        val_result = run_test(cfg, model, val_data_loader, distributed, logger)
-        evaluator(logger, val_result)
+        run_val(cfg, model, val_data_loader, distributed, logger)
 
     logger.info("Start training")
     max_iter = len(train_data_loader)
@@ -135,27 +114,14 @@ def train(cfg, local_rank, distributed, logger):
     torch.save(test_result, output_path % ('test', 0))
 
     print_first_grad = True
-    for epoch in tqdm(range(cfg.SOLVER.MAX_ITER)):
+    for epoch in range(cfg.SOLVER.MAX_ITER):
         epoch_loss = []
-        bad_sample_list = []
-        for iteration, (fg_imgs, fg_txts, bg_imgs, bg_txts) in enumerate(tqdm(train_data_loader)):
+        for iteration, (fg_imgs, fg_txts, bg_imgs, bg_txts) in enumerate(train_data_loader):
             data_time = time.time() - end
             iteration = iteration + 1
             model.train()
-
-            for sub_iteration, entry in enumerate(zip(fg_imgs, fg_txts, bg_imgs, bg_txts)):
-                fg_img, fg_txt, bg_img, bg_txt = entry
-                # If no relationship is captured, ignore the whole sample (positive, negative)
-                if len(fg_img['entities']) < 2 \
-                        or len(fg_txt['entities']) < 2 \
-                        or len(fg_img['relations']) < 1 \
-                        or len(fg_txt['relations']) < 1 \
-                        or len(bg_img['entities']) < 2 \
-                        or len(bg_txt['entities']) < 2 \
-                        or len(bg_img['relations']) < 1 \
-                        or len(bg_txt['relations']) < 1:
-                    bad_sample_list.append(sub_iteration)
-                    next
+        
+            for fg_img, fg_txt, bg_img, bg_txt in zip(fg_imgs, fg_txts, bg_imgs, bg_txts):
                 fg_img['entities'] = fg_img['entities'].to(device)
                 fg_img['relations'] = fg_img['relations'].to(device)
                 fg_img['graph'] = fg_img['graph'].to(device)
@@ -169,34 +135,23 @@ def train(cfg, local_rank, distributed, logger):
                 bg_txt['relations'] = bg_txt['relations'].to(device)
                 bg_txt['graph'] = bg_txt['graph'].to(device)
 
-            for i in reversed(bad_sample_list):
-                del (fg_imgs[i])
-                del (fg_txts[i])
-                del (bg_imgs[i])
-                del (bg_txts[i])
-            bad_sample_list.clear()
+            loss_list = model(fg_imgs, fg_txts, bg_imgs, bg_txts)
 
-            if len(fg_imgs) > 0:
-                loss_list = model(fg_imgs, fg_txts, bg_imgs, bg_txts)
+            losses = sum(loss_list) / (len(loss_list) + 1e-9)
+            epoch_loss.append(float(losses))
 
-                losses = sum(loss_list) / (len(loss_list) + 1e-9)
-                epoch_loss.append(float(losses))
-                #print("batch loss; ", float(losses))
-                optimizer.zero_grad()
-                # Note: If mixed precision is not used, this ends up doing nothing
-                # Otherwise apply loss scaling for mixed-precision recipe
-                with amp.scale_loss(losses, optimizer) as scaled_losses:
-                    scaled_losses.backward()
+            optimizer.zero_grad()
+            # Note: If mixed precision is not used, this ends up doing nothing
+            # Otherwise apply loss scaling for mixed-precision recipe
+            with amp.scale_loss(losses, optimizer) as scaled_losses:
+                scaled_losses.backward()
+        
+            # add clip_grad_norm from MOTIFS, used for debug
+            #verbose = (iteration % cfg.SOLVER.PRINT_GRAD_FREQ) == 0 or print_first_grad # print grad or not
+            #print_first_grad = False
+            #clip_grad_norm([(n, p) for n, p in model.named_parameters() if p.requires_grad], max_norm=cfg.SOLVER.GRAD_NORM_CLIP, logger=logger, verbose=verbose, clip=True)
 
-                # add clip_grad_norm from MOTIFS, used for debug
-                verbose = (iteration % cfg.SOLVER.PRINT_GRAD_FREQ) == 0 or print_first_grad # print grad or not
-                print_first_grad = False
-                clip_grad_norm([(n, p) for n, p in model.named_parameters() if p.requires_grad], max_norm=cfg.SOLVER.GRAD_NORM_CLIP, logger=logger, verbose=verbose, clip=True)
-
-                optimizer.step()
-                # scheduler should be called after optimizer.step() in pytorch>=1.1.0
-                assert cfg.SOLVER.SCHEDULE.TYPE != "WarmupReduceLROnPlateau"
-                scheduler.step()
+            optimizer.step()
 
             batch_time = time.time() - end
             end = time.time()
@@ -204,13 +159,9 @@ def train(cfg, local_rank, distributed, logger):
         logger.info("epoch: {epoch} loss: {loss:.6f} lr: {lr:.6f}".format(epoch=epoch, loss=float(sum(epoch_loss) / len(epoch_loss)), lr=optimizer.param_groups[-1]["lr"]))
         
         if epoch % checkpoint_period == 0:
-            save_path = os.path.join(cfg.OUTPUT_DIR, "model_{}.pytorch".format(str(epoch)))
-            logger.info(f"Saving model {save_path}")
-            torch.save(model.state_dict(), save_path)
+            torch.save(model.state_dict(), os.path.join(cfg.OUTPUT_DIR, "model_{}.pytorch".format(str(epoch))))
         if epoch == max_iter:
-            save_path =  os.path.join(cfg.OUTPUT_DIR, "model_final.pytorch")
-            logger.info(f"Saving model {save_path}")
-            torch.save(model.state_dict(), save_path)
+            torch.save(model.state_dict(), os.path.join(cfg.OUTPUT_DIR, "model_final.pytorch"))
 
         val_result = None # used for scheduler updating
         if cfg.SOLVER.TO_VAL and epoch % cfg.SOLVER.VAL_PERIOD == 0:
@@ -223,7 +174,9 @@ def train(cfg, local_rank, distributed, logger):
             val_similarity = evaluator(logger, val_result)
             torch.save({'result' : val_result, 'similarity' : val_similarity}, output_path % ('val', epoch))
         
-
+        # scheduler should be called after optimizer.step() in pytorch>=1.1.0
+        assert cfg.SOLVER.SCHEDULE.TYPE != "WarmupReduceLROnPlateau"
+        scheduler.step()
 
     
     total_training_time = time.time() - start_training_time
@@ -239,27 +192,14 @@ def train(cfg, local_rank, distributed, logger):
 def run_val(cfg, model, val_data_loader, distributed, logger):
     if distributed:
         model = model.module
-    torch.cuda.empty_cache()
+    #torch.cuda.empty_cache()
     device = torch.device(cfg.MODEL.DEVICE)
     model.eval()
 
     val_result = []
-    bad_sample_list = []
     logger.info('START VALIDATION with size: ' + str(len(val_data_loader)))
     for iteration, (fg_imgs, fg_txts, bg_imgs, bg_txts) in enumerate(tqdm(val_data_loader)):
-        for sub_iteration, entry in enumerate(zip(fg_imgs, fg_txts, bg_imgs, bg_txts)):
-            fg_img, fg_txt, bg_img, bg_txt = entry
-            # If no relationship is captured, ignore the whole sample (positive, negative)
-            if len(fg_img['entities']) < 2\
-                    or len(fg_txt['entities']) < 2\
-                    or len(fg_img['relations']) < 1\
-                    or len(fg_txt['relations']) < 1 \
-                    or len(bg_img['entities']) < 2 \
-                    or len(bg_txt['entities']) < 2 \
-                    or len(bg_img['relations']) < 1 \
-                    or len(bg_txt['relations']) < 1:
-                bad_sample_list.append(sub_iteration)
-                next
+        for fg_img, fg_txt, bg_img, bg_txt in zip(fg_imgs, fg_txts, bg_imgs, bg_txts):
             fg_img['entities'] = fg_img['entities'].to(device)
             fg_img['relations'] = fg_img['relations'].to(device)
             fg_img['graph'] = fg_img['graph'].to(device)
@@ -273,19 +213,12 @@ def run_val(cfg, model, val_data_loader, distributed, logger):
             bg_txt['relations'] = bg_txt['relations'].to(device)
             bg_txt['graph'] = bg_txt['graph'].to(device)
 
-        for i in reversed(bad_sample_list):
-            del(fg_imgs[i])
-            del(fg_txts[i])
-            del(bg_imgs[i])
-            del(bg_txts[i])
-        bad_sample_list.clear()
-        if len(fg_imgs) > 0:
-            loss_list = model(fg_imgs, fg_txts, bg_imgs, bg_txts)
+        loss_list = model(fg_imgs, fg_txts, bg_imgs, bg_txts)
 
-            losses = sum(loss_list)
-
-            synchronize()
-            val_result.append(float(losses))
+        losses = sum(loss_list)
+        
+        synchronize()
+        val_result.append(float(losses))
     # support for multi gpu distributed testing
     gathered_result = all_gather(torch.tensor(val_result).cpu())
     gathered_result = [t.view(-1) for t in gathered_result]
@@ -293,7 +226,7 @@ def run_val(cfg, model, val_data_loader, distributed, logger):
     valid_result = gathered_result[gathered_result>=0]
     val_result = float(valid_result.mean())
     del gathered_result, valid_result
-    torch.cuda.empty_cache()
+    #torch.cuda.empty_cache()
     return val_result
 
 def to_cpu(inp_list):
@@ -305,28 +238,14 @@ def to_cpu(inp_list):
 def run_test(cfg, model, test_data_loader, distributed, logger):
     if distributed:
         model = model.module
-    torch.cuda.empty_cache()
+    #torch.cuda.empty_cache()
     device = torch.device(cfg.MODEL.DEVICE)
     model.eval()
 
     test_result = []
     logger.info('START TEST with size: ' + str(len(test_data_loader)))
-    bad_sample_list = []
     for iteration, (fg_imgs, fg_txts, bg_imgs, bg_txts) in enumerate(tqdm(test_data_loader)):
-        for sub_iteration, entry in enumerate(zip(fg_imgs, fg_txts, bg_imgs, bg_txts)):
-            fg_img, fg_txt, bg_img, bg_txt = entry
-            # If no relationship is captured, ignore the whole sample (positive, negative)
-            if len(fg_img['entities']) < 2\
-                    or len(fg_txt['entities']) < 2\
-                    or len(fg_img['relations']) < 1\
-                    or len(fg_txt['relations']) < 1 \
-                    or len(bg_img['entities']) < 2 \
-                    or len(bg_txt['entities']) < 2 \
-                    or len(bg_img['relations']) < 1 \
-                    or len(bg_txt['relations']) < 1:
-                bad_sample_list.append(sub_iteration)
-                continue
-
+        for fg_img, fg_txt, bg_img, bg_txt in zip(fg_imgs, fg_txts, bg_imgs, bg_txts):
             fg_img['entities'] = fg_img['entities'].to(device)
             fg_img['relations'] = fg_img['relations'].to(device)
             fg_img['graph'] = fg_img['graph'].to(device)
@@ -341,16 +260,9 @@ def run_test(cfg, model, test_data_loader, distributed, logger):
             bg_txt['graph'] = bg_txt['graph'].to(device)
 
         synchronize()
-        for i in reversed(bad_sample_list):
-            del(fg_imgs[i])
-            del(fg_txts[i])
-            del(bg_imgs[i])
-            del(bg_txts[i])
-        bad_sample_list.clear()
-        if len(fg_imgs) > 0:
-            test_output = model(fg_imgs, fg_txts, bg_imgs, bg_txts, is_test=True)
-            gathered_result = all_gather(to_cpu(test_output).cpu())
-            test_result.append(gathered_result)
+        test_output = model(fg_imgs, fg_txts, bg_imgs, bg_txts, is_test=True)
+        gathered_result = all_gather(to_cpu(test_output).cpu())
+        test_result.append(gathered_result)
     return test_result
 
 def main():
