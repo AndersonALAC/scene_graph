@@ -87,7 +87,7 @@ class ROIRelationHead(torch.nn.Module):
         print(relation_logits)
 
         if self.cfg.MODEL.BALANCED_NORM:
-            relation_probs_norm, labeling_prob, rel_labels_one_hot_count = self.balanced_norm((relation_logits, refine_logits), rel_labels)
+            relation_probs_norm, labeling_prob, rel_labels_one_hot_count = self.balanced_norm(relation_logits, rel_labels)
         else:
             relation_probs_norm = labeling_prob = None
 

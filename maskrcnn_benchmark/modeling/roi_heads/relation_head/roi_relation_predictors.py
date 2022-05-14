@@ -1444,7 +1444,7 @@ class TransLikePredictor(nn.Module):
                 add_losses['obj_loss'] = loss_refine_obj
             rel_labels = cat(rel_labels, dim=0)
             add_losses['rel_loss'] = self.criterion_loss(rel_dists, rel_labels)
-            return None, None, add_losses
+            return obj_dists, rel_dists, add_losses
         else:
             obj_dists = obj_dists.split(num_objs, dim=0)
             rel_dists = rel_dists.split(num_rels, dim=0)
