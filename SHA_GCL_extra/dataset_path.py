@@ -1,1 +1,1 @@
-datasets_path = '/home/share/yourpath/'
+datasets_path = '/content/scene_graph/datasets/'
