@@ -44,7 +44,6 @@ class RelationLossComputation(object):
         self.use_balanced_norm = use_balanced_norm
 
         self.weight = None
-        self.weight = torch.tensor(self.weight).cuda()
 
         if self.use_label_smoothing:
             self.criterion_loss = Label_Smoothing_Regression(e=0.01)
