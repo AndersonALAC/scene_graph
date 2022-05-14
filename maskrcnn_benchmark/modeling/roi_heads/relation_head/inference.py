@@ -22,6 +22,7 @@ class PostProcessor(nn.Module):
         attribute_on,
         use_gt_box=False,
         later_nms_pred_thres=0.3,
+        labeling_prob=None,
         use_balanced_norm=False,
     ):
         """
@@ -34,8 +35,15 @@ class PostProcessor(nn.Module):
         self.later_nms_pred_thres = later_nms_pred_thres
         self.use_balanced_norm = use_balanced_norm
 
+        self.labeling_prob = labeling_prob
+        self.labeling_prob[0] = 1 # p(s=0|y=0) always equals 1
+        # Correct the largest outlier, possibly "flying in" predicate
+        minimum, second_minimum = sorted(self.labeling_prob)[:2]
+        min_idx = torch.argmin(self.labeling_prob).item()
+        self.labeling_prob[min_idx] = second_minimum
 
-    def forward(self, x, rel_pair_idxs, boxes, relation_probs_norm=None):
+
+    def forward(self, x, rel_pair_idxs, boxes, relation_probs_norm=None, labeling_prob=None):
         """
         Arguments:
             x (tuple[tensor, tensor]): x contains the relation logits
