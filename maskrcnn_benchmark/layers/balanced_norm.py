@@ -98,7 +98,7 @@ class BalancedNorm1d(nn.Module):
         relation_logits = cat(relation_logits) if isinstance(relation_logits, tuple) else relation_logits
         rel_labels = cat(rel_labels) if isinstance(rel_labels, list) else rel_labels
 
-        self._check_input_dim(relation_logits)
+        # self._check_input_dim(relation_logits)
 
         exponential_average_factor = 0.0
 
