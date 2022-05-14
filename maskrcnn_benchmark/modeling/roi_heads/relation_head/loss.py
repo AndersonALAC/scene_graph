@@ -27,6 +27,7 @@ class RelationLossComputation(object):
         use_label_smoothing,
         predicate_proportion,
         use_balanced_norm,
+        weight_factor
     ):
         """
         Arguments:
@@ -42,6 +43,9 @@ class RelationLossComputation(object):
         self.pred_weight = (1.0 / torch.FloatTensor([0.5,] + predicate_proportion)).cuda()
 
         self.use_balanced_norm = use_balanced_norm
+
+        self.weight = None
+        self.weight = torch.tensor(self.weight).cuda() * weight_factor
 
         if self.use_label_smoothing:
             self.criterion_loss = Label_Smoothing_Regression(e=0.01)
