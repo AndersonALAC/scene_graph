@@ -161,13 +161,14 @@ def train(cfg, local_rank, distributed, logger):
         images = images.to(device)
         targets = [target.to(device) for target in targets]
 
-        loss_dict = model(images, targets)
+        loss_dict, rel_features, rel_targets = model(images, targets)
 
-        losses = sum(loss for loss in loss_dict.values())
+        losses = sum(loss for key, loss in loss_dict.items() if key != 'rel_labels_one_hot_count')
 
         # reduce losses over all GPUs for logging purposes
         loss_dict_reduced = reduce_loss_dict(loss_dict)
-        losses_reduced = sum(loss for loss in loss_dict_reduced.values())
+        # losses_reduced = sum(loss for loss in loss_dict_reduced.values())
+        losses_reduced = sum(loss for key, loss in loss_dict_reduced.items() if key != 'rel_labels_one_hot_count')
         meters.update(loss=losses_reduced, **loss_dict_reduced)
 
         optimizer.zero_grad()

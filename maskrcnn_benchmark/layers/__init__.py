@@ -21,6 +21,7 @@ from .dcn.deform_conv_func import deform_conv, modulated_deform_conv
 from .dcn.deform_conv_module import DeformConv, ModulatedDeformConv, ModulatedDeformConvPack
 from .dcn.deform_pool_func import deform_roi_pooling
 from .dcn.deform_pool_module import DeformRoIPooling, DeformRoIPoolingPack, ModulatedDeformRoIPoolingPack
+from .balanced_norm import BalancedNorm1d, LearnableBalancedNorm1d
 
 
 __all__ = [
@@ -49,5 +50,7 @@ __all__ = [
     'DeformRoIPooling',
     'DeformRoIPoolingPack',
     'ModulatedDeformRoIPoolingPack',
+    'BalancedNorm1d',
+    'LearnableBalancedNorm1d'
 ]
 

@@ -26,6 +26,7 @@ class RelationLossComputation(object):
         attribute_bgfg_ratio,
         use_label_smoothing,
         predicate_proportion,
+        use_balanced_norm,
     ):
         """
         Arguments:
@@ -40,13 +41,17 @@ class RelationLossComputation(object):
         self.use_label_smoothing = use_label_smoothing
         self.pred_weight = (1.0 / torch.FloatTensor([0.5,] + predicate_proportion)).cuda()
 
+        self.use_balanced_norm = use_balanced_norm
+
         if self.use_label_smoothing:
             self.criterion_loss = Label_Smoothing_Regression(e=0.01)
         else:
             self.criterion_loss = nn.CrossEntropyLoss()
 
+        if self.use_balanced_norm:
+            self.loss_relation_balanced_norm = nn.NLLLoss(weight=self.weight)
 
-    def __call__(self, proposals, rel_labels, relation_logits, refine_logits):
+    def __call__(self, proposals, rel_labels, relation_logits, refine_logits, relation_probs_norm=None):
         """
         Computes the loss for relation triplet.
         This requires that the subsample method has been called beforehand.
@@ -74,8 +79,14 @@ class RelationLossComputation(object):
 
         fg_labels = cat([proposal.get_field("labels") for proposal in proposals], dim=0)
         rel_labels = cat(rel_labels, dim=0)
+        fg_idxs, bg_idxs = (rel_labels != 0), (rel_labels == 0)
 
-        loss_relation = self.criterion_loss(relation_logits, rel_labels.long())
+        if self.use_balanced_norm:
+            assert relation_probs_norm is not None
+            loss_relation = self.loss_relation_balanced_norm(torch.log(relation_probs_norm), rel_labels.long())
+        else:
+            loss_relation = self.criterion_loss(relation_logits, rel_labels.long())
+
         loss_refine_obj = self.criterion_loss(refine_obj_logits, fg_labels.long())
 
         # The following code is used to calcaulate sampled attribute loss
@@ -172,6 +183,7 @@ def make_roi_relation_loss_evaluator(cfg):
         cfg.MODEL.ROI_ATTRIBUTE_HEAD.ATTRIBUTE_BGFG_RATIO,
         cfg.MODEL.ROI_RELATION_HEAD.LABEL_SMOOTHING_LOSS,
         cfg.MODEL.ROI_RELATION_HEAD.REL_PROP,
+        cfg.MODEL.BALANCED_NORM,
     )
 
     return loss_evaluator

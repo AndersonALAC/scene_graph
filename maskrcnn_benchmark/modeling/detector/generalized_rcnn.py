@@ -48,8 +48,9 @@ class GeneralizedRCNN(nn.Module):
         images = to_image_list(images)
         features = self.backbone(images.tensors)
         proposals, proposal_losses = self.rpn(images, features, targets)
+        rel_features = rel_targets = None
         if self.roi_heads:
-            x, result, detector_losses = self.roi_heads(features, proposals, targets, logger)
+            x, result, detector_losses, rel_features, rel_targets = self.roi_heads(features, proposals, targets, logger)
         else:
             # RPN-only models don't have roi_heads
             x = features
@@ -62,6 +63,6 @@ class GeneralizedRCNN(nn.Module):
             if not self.cfg.MODEL.RELATION_ON:
                 # During the relationship training stage, the rpn_head should be fixed, and no loss. 
                 losses.update(proposal_losses)
-            return losses
+            return losses, rel_features, rel_targets
 
         return result

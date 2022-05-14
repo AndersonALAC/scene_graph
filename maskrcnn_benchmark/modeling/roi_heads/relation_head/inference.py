@@ -7,6 +7,7 @@ from maskrcnn_benchmark.structures.bounding_box import BoxList
 from maskrcnn_benchmark.structures.boxlist_ops import boxlist_nms
 from maskrcnn_benchmark.structures.boxlist_ops import cat_boxlist
 from maskrcnn_benchmark.modeling.box_coder import BoxCoder
+from maskrcnn_benchmark.modeling.utils import get_constr_out
 from .utils_relation import obj_prediction_nms
 
 class PostProcessor(nn.Module):
@@ -21,6 +22,7 @@ class PostProcessor(nn.Module):
         attribute_on,
         use_gt_box=False,
         later_nms_pred_thres=0.3,
+        use_balanced_norm=False,
     ):
         """
         Arguments:
@@ -30,8 +32,10 @@ class PostProcessor(nn.Module):
         self.attribute_on = attribute_on
         self.use_gt_box = use_gt_box
         self.later_nms_pred_thres = later_nms_pred_thres
+        self.use_balanced_norm = use_balanced_norm
 
-    def forward(self, x, rel_pair_idxs, boxes):
+
+    def forward(self, x, rel_pair_idxs, boxes, relation_probs_norm=None):
         """
         Arguments:
             x (tuple[tensor, tensor]): x contains the relation logits
@@ -58,6 +62,11 @@ class PostProcessor(nn.Module):
             finetune_obj_logits = refine_logits
 
         results = []
+
+        if self.use_balanced_norm:
+            assert relation_probs_norm is not None
+            start_idx = 0
+            
         for i, (rel_logit, obj_logit, rel_pair_idx, box) in enumerate(zip(
             relation_logits, finetune_obj_logits, rel_pair_idxs, boxes
         )):
@@ -99,7 +108,14 @@ class PostProcessor(nn.Module):
             # sorting triples according to score production
             obj_scores0 = obj_scores[rel_pair_idx[:, 0]]
             obj_scores1 = obj_scores[rel_pair_idx[:, 1]]
-            rel_class_prob = F.softmax(rel_logit, -1)
+
+            if self.use_balanced_norm:
+                end_idx = start_idx + rel_logit.shape[0]
+                rel_class_prob = relation_probs_norm[start_idx:end_idx]
+                start_idx = end_idx
+            else:
+                rel_class_prob = F.softmax(rel_logit, -1)
+
             rel_scores, rel_class = rel_class_prob[:, 1:].max(dim=1)
             rel_class = rel_class + 1
             # TODO Kaihua: how about using weighted some here?  e.g. rel*1 + obj *0.8 + obj*0.8
@@ -125,10 +141,12 @@ def make_roi_relation_post_processor(cfg):
     attribute_on = cfg.MODEL.ATTRIBUTE_ON
     use_gt_box = cfg.MODEL.ROI_RELATION_HEAD.USE_GT_BOX
     later_nms_pred_thres = cfg.TEST.RELATION.LATER_NMS_PREDICTION_THRES
+    use_balanced_norm = cfg.MODEL.BALANCED_NORM
 
     postprocessor = PostProcessor(
         attribute_on,
         use_gt_box,
         later_nms_pred_thres,
+        use_balanced_norm,
     )
     return postprocessor

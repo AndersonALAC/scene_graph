@@ -44,6 +44,11 @@ _C.MODEL.PRETRAINED_DETECTOR_CKPT_VG = datasets_path+\
 _C.MODEL.PRETRAINED_DETECTOR_CKPT_GQA = datasets_path+\
                                     "datasets/vg/detector_model/GQA/model_final_from_vg.pth"
 
+_C.MODEL.BALANCED_NORM = False # Whether to enable training-time balanced_norm
+_C.MODEL.BALANCED_NORM_NORMALIZED_PROBS = False # whether to normalilzed probabilities after applying balanced norm. Default: `True`. 
+_C.MODEL.BALANCED_NORM_WITH_GRADIENT = False
+
+
 # -----------------------------------------------------------------------------
 # INPUT
 # -----------------------------------------------------------------------------
