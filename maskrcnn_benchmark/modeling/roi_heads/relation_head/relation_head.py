@@ -84,8 +84,6 @@ class ROIRelationHead(torch.nn.Module):
         # should corresponding to all the functions and layers after the self.context class
         refine_logits, relation_logits, add_losses = self.predictor(proposals, rel_pair_idxs, rel_labels, rel_binarys, roi_features, union_features, logger)
 
-        print(relation_logits)
-
         if self.cfg.MODEL.BALANCED_NORM:
             relation_probs_norm, labeling_prob, rel_labels_one_hot_count = self.balanced_norm(relation_logits, rel_labels)
         else:
