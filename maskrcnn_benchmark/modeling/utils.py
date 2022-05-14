@@ -14,3 +14,16 @@ def cat(tensors, dim=0):
     if len(tensors) == 1:
         return tensors[0]
     return torch.cat(tensors, dim)
+
+def get_constr_out(x, R):
+    """ Given the output of the neural network x returns the output of MCM given the hierarchy constraint expressed in the matrix R """
+    # (Pdb) output.shape
+    # torch.Size([4, n_class+1])
+    # (Pdb) R.shape
+    # torch.Size([1, n_class+1, n_class+1])
+    c_out = x.double()
+    c_out = c_out.unsqueeze(1)
+    c_out = c_out.expand(len(x),R.shape[1], R.shape[1])
+    R_batch = R.expand(len(x),R.shape[1], R.shape[1])
+    final_out, _ = torch.max(R_batch*c_out.double(), dim = 2)
+    return final_out
