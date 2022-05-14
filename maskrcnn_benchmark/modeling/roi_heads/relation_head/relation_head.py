@@ -93,10 +93,10 @@ class ROIRelationHead(torch.nn.Module):
 
         # for test
         if not self.training:
-            result = self.post_processor((relation_logits, refine_logits), rel_pair_idxs, proposals, relation_probs_norm, labeling_prob, self.matrix_of_ancestor)
+            result = self.post_processor((relation_logits, refine_logits), rel_pair_idxs, proposals, relation_probs_norm, labeling_prob)
             return roi_features, result, {}, None, None
         
-        loss_relation, loss_refine, loss_relation_stl, loss_center, loss_gx, loss_avg_belief, rel_features, rel_targets = self.loss_evaluator(proposals, rel_labels, relation_logits, refine_logits, relation_probs_norm, relation_logits_raw, rel_pair_idxs, labeling_prob, self.matrix_of_ancestor)
+        loss_relation, loss_refine, loss_relation_stl, loss_center, loss_gx, loss_avg_belief, rel_features, rel_targets = self.loss_evaluator(proposals, rel_labels, relation_logits, refine_logits, relation_probs_norm, relation_logits_raw, rel_pair_idxs, labeling_prob)
 
         if self.cfg.MODEL.ATTRIBUTE_ON and isinstance(loss_refine, (list, tuple)):
             output_losses = dict(loss_rel=loss_relation, loss_refine_obj=loss_refine[0], loss_refine_att=loss_refine[1])
