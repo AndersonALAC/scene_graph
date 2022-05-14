@@ -93,34 +93,10 @@ class ROIRelationHead(torch.nn.Module):
 
         # for test
         if not self.training:
-            result = self.post_processor((relation_logits, refine_logits), rel_pair_idxs, proposals, relation_probs_norm, labeling_prob)
-            return roi_features, result, {}, None, None
-        
-        loss_relation, loss_refine, loss_relation_stl, loss_center, loss_gx, loss_avg_belief, rel_features, rel_targets = self.loss_evaluator(proposals, rel_labels, relation_logits, refine_logits, relation_probs_norm, relation_logits_raw, rel_pair_idxs, labeling_prob)
-
-        if self.cfg.MODEL.ATTRIBUTE_ON and isinstance(loss_refine, (list, tuple)):
-            output_losses = dict(loss_rel=loss_relation, loss_refine_obj=loss_refine[0], loss_refine_att=loss_refine[1])
+            result = self.post_processor((relation_logits, refine_logits), rel_pair_idxs, proposals)
+            return roi_features, result, {}
         else:
-            output_losses = dict(loss_rel=loss_relation, loss_refine_obj=loss_refine)
-
-        if loss_relation_stl is not None:
-            output_losses['loss_relation_stl'] = loss_relation_stl
-
-        if loss_center is not None:
-            output_losses['loss_center'] = loss_center
-
-        if loss_gx is not None:
-            output_losses['loss_gx'] = loss_gx
-
-        if loss_avg_belief is not None:
-            output_losses['loss_avg_belief'] = loss_avg_belief
-
-        if rel_labels_one_hot_count is not None:
-            output_losses['rel_labels_one_hot_count'] = rel_labels_one_hot_count
-
-        output_losses.update(add_losses)
-
-        return roi_features, proposals, output_losses, rel_features, rel_targets
+            return roi_features, proposals, add_losses
 
 
 def build_roi_relation_head(cfg, in_channels):
