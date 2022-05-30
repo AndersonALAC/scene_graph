@@ -14,6 +14,7 @@ import datetime
 
 import torch
 from torch.nn.utils import clip_grad_norm_
+from torch.utils.tensorboard import SummaryWriter
 
 from maskrcnn_benchmark.config import cfg
 from maskrcnn_benchmark.data import make_data_loader
@@ -40,7 +41,7 @@ except ImportError:
     raise ImportError('Use APEX for multi-precision via apex.amp')
 
 
-def train(cfg, local_rank, distributed, logger):
+def train(cfg, local_rank, distributed, logger, writer=None):
     best_epoch = 0
     best_mR = 0.0
     logger.info("***********************Step 1: loading models***********************")
@@ -209,6 +210,13 @@ def train(cfg, local_rank, distributed, logger):
                     memory=torch.cuda.max_memory_allocated() / 1024.0 / 1024.0,
                 )
             )
+        
+        #tensorboard writer
+        logger.info("--------------------------------------------------------------------------------------------------------------------")
+        print(meters)
+        logger.info("--------------------------------------------------------------------------------------------------------------------")
+        print(meters.meters)
+        logger.info("--------------------------------------------------------------------------------------------------------------------")
 
         if iteration % checkpoint_period == 0:
             checkpointer.save("model_{:07d}".format(iteration), **arguments)
@@ -437,6 +445,9 @@ def main():
 
     if not args.skip_test:
         run_test(cfg, model, args.distributed, logger)
+
+    exmp_name = cfg.OUTPUT_DIR.split('/')[-1]
+    writer = SummaryWriter(comment=exmp_name)
 
 
 if __name__ == "__main__":
