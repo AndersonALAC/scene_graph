@@ -5,6 +5,7 @@ Basic training script for PyTorch
 
 # Set up custom environment before nearly anything else is imported
 # NOTE: this should be the first import (no not reorder)
+from asyncore import write
 from maskrcnn_benchmark.utils.env import setup_environment  # noqa F401 isort:skip
 
 import argparse
@@ -212,11 +213,10 @@ def train(cfg, local_rank, distributed, logger, writer=None):
             )
         
         #tensorboard writer
-        logger.info("1-------------------")        
-        print(meters.meters["loss"].median)
-        print(meters.meters["loss"].global_avg)
-        logger.info("2-------------------")        
-        print(meters)
+        for name, meter in meters.meters.items():
+            print(name)
+            print(meter.global_avg)
+            # writer.add_scalar(f'Train/{name}', meter.global_avg, iteration)
 
         if iteration % checkpoint_period == 0:
             checkpointer.save("model_{:07d}".format(iteration), **arguments)
