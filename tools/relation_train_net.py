@@ -214,9 +214,7 @@ def train(cfg, local_rank, distributed, logger, writer=None):
         
         #tensorboard writer
         for name, meter in meters.meters.items():
-            print(name)
-            print(meter.global_avg)
-            # writer.add_scalar(f'Train/{name}', meter.global_avg, iteration)
+            writer.add_scalar(f'Train/{name}', meter.global_avg, iteration)
 
         if iteration % checkpoint_period == 0:
             checkpointer.save("model_{:07d}".format(iteration), **arguments)
@@ -232,6 +230,7 @@ def train(cfg, local_rank, distributed, logger, writer=None):
                 best_mR = val_result
             logger.info("now best epoch in mR@k is : %d, num is %.4f" % (best_epoch, best_mR))
             logger.info("Validation Result: %.4f" % val_result)
+            writer.add_scalar('Val/mR_100', val_result, iteration)
  
         # scheduler should be called after optimizer.step() in pytorch>=1.1.0
         # https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
@@ -414,6 +413,9 @@ def main():
     cfg.merge_from_list(args.opts)
     cfg.freeze()
 
+    exmp_name = cfg.OUTPUT_DIR.split('/')[-1]
+    writer = SummaryWriter(comment=exmp_name)
+
     output_dir = cfg.OUTPUT_DIR
     if output_dir:
         mkdir(output_dir)
@@ -441,13 +443,12 @@ def main():
     logger.info("***********************Step 0: over***********************")
     print('\n')
 
-    model = train(cfg, args.local_rank, args.distributed, logger)
+    model = train(cfg, args.local_rank, args.distributed, logger, writer=writer)
 
     if not args.skip_test:
         run_test(cfg, model, args.distributed, logger)
-
-    exmp_name = cfg.OUTPUT_DIR.split('/')[-1]
-    writer = SummaryWriter(comment=exmp_name)
+    if args.local_rank == 0:
+        writer.close
 
 
 if __name__ == "__main__":
