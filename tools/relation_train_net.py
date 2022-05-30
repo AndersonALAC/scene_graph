@@ -215,6 +215,8 @@ def train(cfg, local_rank, distributed, logger, writer=None):
         logger.info("1-------------------")        
         print(meters.meters["loss"].median)
         print(meters.meters["loss"].global_avg)
+        logger.info("2-------------------")        
+        print(meters)
 
         if iteration % checkpoint_period == 0:
             checkpointer.save("model_{:07d}".format(iteration), **arguments)
