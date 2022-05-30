@@ -219,6 +219,8 @@ def train(cfg, local_rank, distributed, logger, writer=None):
         print(meters.meters)
         logger.info("3--------------------------------------------------------------------------------------------------------------------")
         print(meters.meters["loss"].total)
+        print(meters.meters["loss"].deque)
+        print(meters.meters["loss"].series)
 
         if iteration % checkpoint_period == 0:
             checkpointer.save("model_{:07d}".format(iteration), **arguments)
