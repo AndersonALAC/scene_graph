@@ -413,8 +413,7 @@ def main():
     cfg.merge_from_list(args.opts)
     cfg.freeze()
 
-    exmp_name = cfg.OUTPUT_DIR.split('/')[-1]
-    writer = SummaryWriter(comment=exmp_name)
+    writer = SummaryWriter(cfg.OUTPUT_DIR+'/tensorboard_log')
 
     output_dir = cfg.OUTPUT_DIR
     if output_dir:
