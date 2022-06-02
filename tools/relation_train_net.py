@@ -445,7 +445,8 @@ def main():
     model = train(cfg, args.local_rank, args.distributed, logger, writer=writer)
 
     if not args.skip_test:
-        run_test(cfg, model, args.distributed, logger)
+        with torch.no_grad():
+            run_test(cfg, model, args.distributed, logger)
     if args.local_rank == 0:
         writer.close
 
