@@ -270,7 +270,7 @@ def fix_eval_modules(eval_modules):
 def run_val(cfg, model, val_data_loaders, distributed, logger):
     if distributed:
         model = model.module
-    #torch.cuda.empty_cache()
+    torch.cuda.empty_cache()
     iou_types = ("bbox",)
     if cfg.MODEL.MASK_ON:
         iou_types = iou_types + ("segm",)
@@ -313,7 +313,7 @@ def run_val(cfg, model, val_data_loaders, distributed, logger):
     valid_result = gathered_result[gathered_result>=0]
     val_result = float(valid_result.mean())
     del gathered_result, valid_result
-    #torch.cuda.empty_cache()
+    torch.cuda.empty_cache()
     return val_result
 
 def run_test(cfg, model, distributed, logger, is_best=False):
@@ -325,7 +325,7 @@ def run_test(cfg, model, distributed, logger, is_best=False):
         logger.info("***********************Step testing starts***********************")
     if distributed:
         model = model.module
-    #torch.cuda.empty_cache()
+    torch.cuda.empty_cache()
     iou_types = ("bbox",)
     if cfg.MODEL.MASK_ON:
         iou_types = iou_types + ("segm",)
