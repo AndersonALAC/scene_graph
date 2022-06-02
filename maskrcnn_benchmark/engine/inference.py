@@ -20,7 +20,7 @@ def compute_on_dataset(model, data_loader, device, synchronize_gather=True, time
     model.eval()
     results_dict = {}
     cpu_device = torch.device("cpu")
-    #torch.cuda.empty_cache()
+    torch.cuda.empty_cache()
     for _, batch in enumerate(tqdm(data_loader)):
         with torch.no_grad():
             images, targets, image_ids = batch
@@ -47,7 +47,7 @@ def compute_on_dataset(model, data_loader, device, synchronize_gather=True, time
             results_dict.update(
                 {img_id: result for img_id, result in zip(image_ids, output)}
             )
-    #torch.cuda.empty_cache()
+    torch.cuda.empty_cache()
     return results_dict
 
 
