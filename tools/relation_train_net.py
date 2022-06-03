@@ -14,6 +14,7 @@ import datetime
 
 import torch
 from torch.nn.utils import clip_grad_norm_
+from torch.utils.tensorboard import SummaryWriter
 
 from maskrcnn_benchmark.config import cfg
 from maskrcnn_benchmark.data import make_data_loader
@@ -40,7 +41,7 @@ except ImportError:
     raise ImportError('Use APEX for multi-precision via apex.amp')
 
 
-def train(cfg, local_rank, distributed, logger):
+def train(cfg, local_rank, distributed, logger, writer=None):
     debug_print(logger, 'prepare training')
     model = build_detection_model(cfg) 
     debug_print(logger, 'end model construction')
@@ -192,6 +193,10 @@ def train(cfg, local_rank, distributed, logger):
                 )
             )
 
+        #tensorboard writer
+        for name, meter in meters.meters.items():
+            writer.add_scalar(f'Train/{name}', meter.global_avg, iteration)
+
         if iteration % checkpoint_period == 0:
             checkpointer.save("model_{:07d}".format(iteration), **arguments)
         if iteration == max_iter:
@@ -202,6 +207,7 @@ def train(cfg, local_rank, distributed, logger):
             logger.info("Start validating")
             val_result = run_val(cfg, model, val_data_loaders, distributed, logger)
             logger.info("Validation Result: %.4f" % val_result)
+            writer.add_scalar('Val/mR_100', val_result, iteration)
  
         # scheduler should be called after optimizer.step() in pytorch>=1.1.0
         # https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
@@ -347,6 +353,8 @@ def main():
     cfg.merge_from_list(args.opts)
     cfg.freeze()
 
+    writer = SummaryWriter(cfg.OUTPUT_DIR+'/tensorboard_log')
+
     output_dir = cfg.OUTPUT_DIR
     if output_dir:
         mkdir(output_dir)
@@ -369,10 +377,12 @@ def main():
     # save overloaded model config in the output directory
     save_config(cfg, output_config_path)
 
-    model = train(cfg, args.local_rank, args.distributed, logger)
+    model = train(cfg, args.local_rank, args.distributed, logger, writer=writer)
 
     if not args.skip_test:
         run_test(cfg, model, args.distributed, logger)
+    if args.local_rank == 0:
+        writer.close
 
 
 if __name__ == "__main__":
